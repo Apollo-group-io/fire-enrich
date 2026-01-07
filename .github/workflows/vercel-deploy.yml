@@ -27,7 +27,13 @@ jobs:
     if: ${{ needs.set-env.outputs.stage == 'preview' }}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
 
       - name: Show GitHub Workspace
         run: echo "directory $GITHUB_WORKSPACE"
@@ -63,7 +69,13 @@ jobs:
     if: ${{ needs.set-env.outputs.stage == 'production' }}
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
 
       - name: Show Github Ref
         run: echo ${{ github.ref }}
