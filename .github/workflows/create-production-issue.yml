@@ -1,0 +1,79 @@
+name: Create production release issue
+
+on:
+  push:
+    tags:
+      - 'v*.*.*-production'
+
+jobs:
+  create_issue:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get current date
+        id: date
+        run: echo "::set-output name=today::$(date +'%Y-%m-%d')"
+
+      - name: Extract tag name
+        id: extract_tag
+        run: |
+          TAG_NAME=$(echo "${{ github.ref }}" | awk -F"/" '{print $3}')
+          echo "::set-output name=tag_name::$TAG_NAME"
+
+      - name: Remove current label from issue
+        run: |
+          label=current
+
+          # Fetch open issues
+          open_response=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/issues?state=open")
+
+          open_issue_label=$(echo "$open_response" | jq --arg tag "$tag" '.[] | select(.labels[].name == "current") | .labels[].name | select(endswith("production"))')
+
+          # Fetch closed issues
+          closed_response=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/issues?state=closed")
+
+          closed_issue_label=$(echo "$closed_response" | jq --arg tag "$tag" '.[] | select(.labels[].name == "current") | .labels[].name | select(endswith("production"))')
+
+          if [[ -n "$open_issue_label" ]]; then
+              previous_tag=$open_issue_label
+          elif [[ -n "$closed_issue_label" ]]; then
+              previous_tag=$closed_issue_label
+          else
+              previous_tag=null
+          fi
+
+          echo "PREVIOUS_ISSUE_TAG=$previous_tag" >> $GITHUB_ENV
+
+      - name: Run find-and-replace to remove refs/heads/
+        uses: mad9000/actions-find-and-replace-string@5
+        id: findandreplace
+        with:
+          source: ${{ env.PREVIOUS_ISSUE_TAG }}
+          find: '"'
+          replace: ''
+          replaceAll: true
+
+      - name: Create an issue
+        uses: actions-ecosystem/action-create-issue@v1
+        id: create_issue
+        with:
+          github_token: ${{ secrets.github_token }}
+          title: 🚀 Release Checklist for ${{ steps.date.outputs.today }} - Tag ${{ steps.extract_tag.outputs.tag_name }} 🚀
+          body: |
+            ## 🚀 Release Checklist for ${{ steps.date.outputs.today }} - Production - Tag ${{ steps.extract_tag.outputs.tag_name }} 🚀
+
+            📌 **Additional Details:**
+            - ✨ **Tag:** ${{ steps.extract_tag.outputs.tag_name }}
+            - 🌟 **Release Branch:** `Main`
+            - 🚀 **Deployment Environment:** `Production`
+            - 📑 **Release Notes:** [Provide a summary of the new features and changes]
+
+          labels: |
+            production-release
+            ${{ steps.extract_tag.outputs.tag_name }}
+
+          assignees: |
+            hammadjaved
+
+          repo: ${{ github.repository }}

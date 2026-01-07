@@ -1,0 +1,150 @@
+name: Close release issue with comments
+
+on:
+  repository_dispatch:
+    types: [close_issue_with_comments]
+
+jobs:
+  issues-mgmt:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check Event Name
+        run: |
+          if [[ "${{ github.event_name }}" != "repository_dispatch" ]]; then
+            echo "This workflow should only be triggered by another workflow."
+            exit 1
+          fi
+
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Remove current label from issue
+        run: |
+          label=current
+
+          # Fetch open issues
+          open_response=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/issues?state=open")
+
+          open_issue_number=$(echo "$open_response" | jq --arg tag "$tag" '.[] | select(.labels[].name == "current") | .number')
+
+          open_issue_label=$(echo "$open_response" | jq --arg tag "$tag" '.[] | select(.labels[].name == "current") | .labels[].name | select(endswith("production"))')
+
+          # Fetch closed issues
+          closed_response=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/issues?state=closed")
+
+          closed_issue_number=$(echo "$closed_response" | jq --arg tag "$tag" '.[] | select(.labels[].name == "current") | .number')
+
+          closed_issue_label=$(echo "$closed_response" | jq --arg tag "$tag" '.[] | select(.labels[].name == "current") | .labels[].name | select(endswith("production"))')
+
+
+          if [[ -n "$open_issue_number" ]]; then
+              response=$open_issue_number
+          elif [[ -n "$closed_issue_number" ]]; then
+              response=$closed_issue_number
+          else
+              response=null
+          fi
+
+          if [[ -n "$open_issue_label" ]]; then
+              previous_tag=$open_issue_label
+          elif [[ -n "$closed_issue_label" ]]; then
+              previous_tag=$closed_issue_label
+          else
+              previous_tag=null
+          fi
+
+          echo "PREVIOUS_ISSUE_NO="$response"" >> $GITHUB_ENV
+          echo "PREVIOUS_ISSUE_TAG=$previous_tag" >> $GITHUB_ENV
+
+          if [[ "$response" != "null" ]]; then
+             echo "Removing label: $label from issue: $response"
+
+             curl -X DELETE \
+             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+             "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$response/labels/$label"
+
+           else
+             echo "No matching issue found. label: $label"
+          fi
+
+      - name: Close the issue and add comment and label
+        run: |
+          tag=$(echo "${{ github.event.client_payload.tag }}" | sed 's/refs\/tags\///')
+
+          # Fetch open issues
+          open_response=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/issues?state=open")
+
+          open_issue_number=$(echo "$open_response" | jq --arg tag "$tag" '.[] | select(.title | contains($tag)) | .number')
+
+          # Fetch closed issues
+          closed_response=$(curl -s -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/issues?state=closed")
+
+          closed_issue_number=$(echo "$closed_response" | jq --arg tag "$tag" '.[] | select(.title | contains($tag)) | .number')
+
+          if [[ -n "$open_issue_number" ]]; then
+              response=$open_issue_number
+          elif [[ -n "$closed_issue_number" ]]; then
+              response=$closed_issue_number
+          else
+              response=null
+          fi
+
+          echo "::set-output name=issue_number::$response"
+
+          # Additional steps to close the issue, add comment, and label
+          if [[ -n "$response" && "$response" != "null" ]]; then
+              echo "Closing issue $response with tag $tag"
+              # Use the issue number from $response to perform the desired actions
+
+              # Add the labels to the issue
+              curl -X POST \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              -d "{\"labels\": [\"closed-by-action\", \"current\"]}" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$response/labels"
+
+              # Add comment to the issue
+              # Prepare comment content
+              comment="I have been deployed to production on $commit_date.\n\n"
+
+              if [[  "$PREVIOUS_ISSUE_TAG" != "null" ]]; then
+               comment+="Previous deployment details:\n"
+               # Add previous deployment details to the comment
+               comment+="Issue: [${{ env.PREVIOUS_ISSUE_NO }}](https://github.com/$GITHUB_REPOSITORY/issues/${{ env.PREVIOUS_ISSUE_NO }})\n"
+               comment+="Tags: [${{ env.PREVIOUS_ISSUE_TAG }}](https://github.com/$GITHUB_REPOSITORY/releases/tag/${{ env.PREVIOUS_ISSUE_TAG }})\n\n"
+              fi
+
+              # Get current deployment details
+              commit=$(git log --format="%H%n%an%n%ai" -1)
+              commit_hash=$(echo "$commit" | awk 'NR==1')
+              commit_author=$(echo "$commit" | awk 'NR==2')
+              commit_date=$(echo "$commit" | awk 'NR==3')
+
+              comment+="Current Deployment details:\n"
+              comment+="Commit: [$commit_hash](https://github.com/$GITHUB_REPOSITORY/commit/$commit_hash)\n"
+              comment+="Author: $commit_author\n"
+              comment+="Runner: $GITHUB_ACTOR\n"
+              comment+="Tags: [$tag](https://github.com/$GITHUB_REPOSITORY/tree/$tag)\n"
+
+              # Add a comment to the issue using GitHub API
+              echo "Adding comment to issue $response"
+              curl -X POST \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              -d "{\"body\": \"$comment\"}" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$response/comments"
+
+              # Close the issue
+              curl -X PATCH \
+              -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+              -H "Accept: application/vnd.github.v3+json" \
+              -d "{\"state\": \"closed\"}" \
+              "https://api.github.com/repos/$GITHUB_REPOSITORY/issues/$response"
+          else
+              echo "No matching issue found. Tag: $tag"
+          fi
