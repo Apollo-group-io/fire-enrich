@@ -1,117 +1,117 @@
-name: Vercel Deployment
+# name: Vercel Deployment
 
-on:
-  push:
-    branches:
-      - main
-  workflow_dispatch:
+# on:
+#   push:
+#     branches:
+#       - main
+#   workflow_dispatch:
 
-env:
-  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-  STAGE: ${{ (endsWith(github.ref, 'production') && 'production') || 'preview' }}
+# env:
+#   VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+#   VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+#   STAGE: ${{ (endsWith(github.ref, 'production') && 'production') || 'preview' }}
 
-jobs:
-  set-env:
-    runs-on: ubuntu-latest
-    outputs:
-      stage: ${{ env.STAGE }}
+# jobs:
+#   set-env:
+#     runs-on: ubuntu-latest
+#     outputs:
+#       stage: ${{ env.STAGE }}
 
-    steps:
-      - run: echo "$STAGE"
+#     steps:
+#       - run: echo "$STAGE"
 
-  Deploy-Dev:
-    runs-on: ubuntu-latest
-    needs: [set-env]
-    environment: ${{ needs.set-env.outputs.stage }}
-    if: ${{ needs.set-env.outputs.stage == 'preview' }}
+#   Deploy-Dev:
+#     runs-on: ubuntu-latest
+#     needs: [set-env]
+#     environment: ${{ needs.set-env.outputs.stage }}
+#     if: ${{ needs.set-env.outputs.stage == 'preview' }}
 
-    steps:
-      - uses: actions/checkout@v4
+#     steps:
+#       - uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+#       - name: Install pnpm
+#         uses: pnpm/action-setup@v4
+#         with:
+#           version: 9
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: '20'
+#           cache: 'pnpm'
 
-      - name: Show GitHub Workspace
-        run: echo "directory $GITHUB_WORKSPACE"
+#       - name: Show GitHub Workspace
+#         run: echo "directory $GITHUB_WORKSPACE"
 
-      - name: Show Github Ref
-        run: echo ${{ github.ref }}
+#       - name: Show Github Ref
+#         run: echo ${{ github.ref }}
 
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+#       - name: Install Vercel CLI
+#         run: npm install --global vercel@latest
 
-      - name: Pull Vercel Environment Information
-        working-directory: ${{ github.workspace }}
-        run: vercel pull --yes --environment=development --token=${{ secrets.VERCEL_TOKEN }}
+#       - name: Pull Vercel Environment Information
+#         working-directory: ${{ github.workspace }}
+#         run: vercel pull --yes --environment=development --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Copy .env from .vercel
-        working-directory: ${{ github.workspace }}
-        run: cp .vercel/.env.development.local .env
+#       - name: Copy .env from .vercel
+#         working-directory: ${{ github.workspace }}
+#         run: cp .vercel/.env.development.local .env
 
-      - name: Build Project Artifacts (Development)
-        working-directory: ${{ github.workspace }}
-        run: NODE_OPTIONS="--max-old-space-size=4096" vercel build --token=${{ secrets.VERCEL_TOKEN }}
+#       - name: Build Project Artifacts (Development)
+#         working-directory: ${{ github.workspace }}
+#         run: NODE_OPTIONS="--max-old-space-size=4096" vercel build --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Deploy Project Artifacts to Vercel (Development)
-        working-directory: ${{ github.workspace }}
-        run: |
-          url="$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})"
-          vercel alias set "$url" development-fire-enrich.vercel.app --token=${{ secrets.VERCEL_TOKEN }} --scope=${{ secrets.VERCEL_ORG_ID }}
+#       - name: Deploy Project Artifacts to Vercel (Development)
+#         working-directory: ${{ github.workspace }}
+#         run: |
+#           url="$(vercel deploy --prebuilt --token=${{ secrets.VERCEL_TOKEN }})"
+#           vercel alias set "$url" development-fire-enrich.vercel.app --token=${{ secrets.VERCEL_TOKEN }} --scope=${{ secrets.VERCEL_ORG_ID }}
 
-  Deploy-Production:
-    runs-on: ubuntu-latest
-    needs: [set-env]
-    environment: ${{ needs.set-env.outputs.stage }}
-    if: ${{ needs.set-env.outputs.stage == 'production' }}
+#   Deploy-Production:
+#     runs-on: ubuntu-latest
+#     needs: [set-env]
+#     environment: ${{ needs.set-env.outputs.stage }}
+#     if: ${{ needs.set-env.outputs.stage == 'production' }}
 
-    steps:
-      - uses: actions/checkout@v4
+#     steps:
+#       - uses: actions/checkout@v4
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          version: 9
+#       - name: Install pnpm
+#         uses: pnpm/action-setup@v4
+#         with:
+#           version: 9
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'pnpm'
+#       - name: Setup Node.js
+#         uses: actions/setup-node@v4
+#         with:
+#           node-version: '20'
+#           cache: 'pnpm'
 
-      - name: Show Github Ref
-        run: echo ${{ github.ref }}
+#       - name: Show Github Ref
+#         run: echo ${{ github.ref }}
 
-      - name: Install Vercel CLI
-        run: npm install --global vercel@latest
+#       - name: Install Vercel CLI
+#         run: npm install --global vercel@latest
 
-      - name: Pull Vercel Environment Information
-        run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+#       - name: Pull Vercel Environment Information
+#         run: vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Copy .env from .vercel
-        working-directory: ${{ github.workspace }}
-        run: cp .vercel/.env.production.local .env
+#       - name: Copy .env from .vercel
+#         working-directory: ${{ github.workspace }}
+#         run: cp .vercel/.env.production.local .env
 
-      - name: Build Project Artifacts
-        run: NODE_OPTIONS="--max-old-space-size=4096" vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+#       - name: Build Project Artifacts
+#         run: NODE_OPTIONS="--max-old-space-size=4096" vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Deploy Project Artifacts to Vercel
-        run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+#       - name: Deploy Project Artifacts to Vercel
+#         run: vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
 
-      - name: Issue Management
-        if: ${{ env.STAGE == 'production' }}
-        run: |
-          echo "Triggering Issue Management Workflow"
-          curl -X POST \
-            -H "Accept: application/vnd.github.everest-preview+json" \
-            -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
-            -d '{"event_type": "close_issue_with_comments", "client_payload": {"tag": "${{github.ref }}"}}' \
-            https://api.github.com/repos/${{ github.repository }}/dispatches
+#       - name: Issue Management
+#         if: ${{ env.STAGE == 'production' }}
+#         run: |
+#           echo "Triggering Issue Management Workflow"
+#           curl -X POST \
+#             -H "Accept: application/vnd.github.everest-preview+json" \
+#             -H "Authorization: Bearer ${{ secrets.GITHUB_TOKEN }}" \
+#             -d '{"event_type": "close_issue_with_comments", "client_payload": {"tag": "${{github.ref }}"}}' \
+#             https://api.github.com/repos/${{ github.repository }}/dispatches
